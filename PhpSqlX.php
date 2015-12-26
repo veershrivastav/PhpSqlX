@@ -1,14 +1,14 @@
 <?php
 /**
- * Quiz Management by www.veershubhranshu.com
+ * PhpSqlX by www.veershrivastav.com
  * 
- *  File: DatabaseConnect
+ * File: PhpSqlX Interface
  * 
  * Author: Veer Shrivastav
  * Date: May 10, 2015, 9:58:51 PM
  *
  */
-interface DatabaseConnect {
+interface PhpSqlX {
     
     public function create_table ($tablename, $columnname, $flags);
     
@@ -35,8 +35,6 @@ interface DatabaseConnect {
     public function rollback_transaction();
     
     public function complete_transaction();
-    
-    public function xml_install(SimpleXMLElement $xmlObj);
     
     public function getCredentials();
 }

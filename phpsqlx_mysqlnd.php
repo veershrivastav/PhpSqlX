@@ -1,15 +1,15 @@
 <?php
 /**
- * Quiz Management by www.veershubhranshu.com
+ * PhpSqlX by www.veershrivastav.com
  * 
- *  File: mysqli_db_connect
+ * File: phpsqlx_mysqlnd
  * 
  * Author: Veer Shrivastav
  * Date: May 11, 2015, 12:44:34 AM
  *
  */
 
-require_once 'DatabaseConnect.php';
+require_once 'PhpSqlX.php';
 
 define("MYSQLI_DB_ENGINE_INNODB", "InnoDB");
 define("MYSQLI_DB_ENGINE_MRG_MYISAM", "MRG_MYISAM");
@@ -19,7 +19,7 @@ define("MYSQLI_DB_ENGINE_CSV", "CSV");
 define("MYSQLI_DB_ENGINE_MEMORY", "MEMORY");
 define("MYSQLI_DB_ENGINE_ARCHIVE", "ARCHIVE");
 
-class mysqli_db_connect implements DatabaseConnect {
+class phpsqlx_mysqlnd implements PhpSqlX {
     
     private $hostname = '';
     private $dbname = '';
@@ -123,11 +123,14 @@ class mysqli_db_connect implements DatabaseConnect {
                             $tempval = array ();
                             $i=0;
                             foreach ($value as $val) {
-                                $tempval[] = "'$val'";
+                                $tempval[] = "?";
+                                $valuearray[$key."$i"] = "$val";
+                                $i++;
                             }
                             $clausereturn[] = " $key IN (".  implode(",", $tempval).")";
                         } else {
-                            $clausereturn[] = " $key = '$value' ";
+                            $clausereturn[] = " $key = ? ";
+                            $valuearray[$key] = "$value";
                         }
                     }
                 } else {
@@ -135,16 +138,19 @@ class mysqli_db_connect implements DatabaseConnect {
                         $tempval = array ();
                         $i=0;
                         foreach ($value as $val) {
-                            $tempval[] = "'$val'";
+                            $tempval[] = "?";
+                            $valuearray[$key."$i"] = "$val";
+                            $i++;
                         }
                         $clausereturn[] = " $key IN (".  implode(",", $tempval).")";
                     } else {
-                        $clausereturn[] = " $key = '$value' ";
+                        $clausereturn[] = " $key = ? ";
+                        $valuearray[$key] = "$value";
                     }
                 }
             }
             //implode to string and return
-            return implode(" $glue ", $clausereturn);    
+            return array(implode(" $glue ", $clausereturn), $valuearray);    
         }
         return false;
     }
@@ -165,10 +171,11 @@ class mysqli_db_connect implements DatabaseConnect {
         foreach ($data as $key=>$val) {
             if(in_array($key, $this->tablecolumns)) {
                 $columnname[] = $key;
-                $valuearray[] = "'$val'";
+                $question[] = "?";
+                $valuearray[$key] = "$val";
             }
         }
-        return array("(".implode(",", $columnname).")", "(".implode(',', $valuearray).")" );
+        return array("(".implode(",", $columnname).")", "(".implode(',', $question).")" ,$valuearray);
     }
 
     private function create_column_builder($columns) {
@@ -242,7 +249,7 @@ class mysqli_db_connect implements DatabaseConnect {
         }
         
         if(!isset(self::$instance)) {
-            self::$instance = new mysqli_db_connect($hostname, $username, $password, $dbname, $port, $socket);
+            self::$instance = new mysqlnd_db_connect($hostname, $username, $password, $dbname, $port, $socket);
             if (self::$error) {
                 self::$instance = false;
             }
@@ -334,12 +341,26 @@ class mysqli_db_connect implements DatabaseConnect {
             return false;
         }
         
-        if($this->connection->query("DELETE FROM $tablename WHERE ".$clause) === false) {
-            error_reporting($this->connection->error, E_ERROR);
-            return false;
+        //Initiate Prepared Statement
+        $this->statement = $this->connection->stmt_init();
+        
+        $this->statement->prepare("DELETE FROM $tablename WHERE ".$clause[0]);
+        
+        $s = str_repeat("s", sizeof($clause[1]));
+        
+        $param = array();
+        foreach ($clause[1] as $key=>$val) {
+            $param[] = &$clause[1][$key];
         }
         
-        return true;
+        call_user_func_array(array($this->statement, 'bind_param'), array_merge(array($s),$param));
+        
+        $r = $this->statement->execute();
+        
+        $this->statement->close();
+        $this->statement = null;
+        
+        return $r;
     }
     
     public function get_records($tablename, $columnname = '*', $where = null, $sort = null, $sortorder='ASC', $limitcount=null, $limitoffset=null) {
@@ -351,7 +372,6 @@ class mysqli_db_connect implements DatabaseConnect {
         //Build Column List
         if(!$columnname == '*') {
             if(!(gettype($columnname) == 'object' || gettype($columnname) == 'array' || gettype($columnname) == 'string')) {
-                //invalid data type for column name
                 trigger_error("Unsupported datatype for column name. Object or Array or String expected, ".gettype($columnname)." passed", E_USER_ERROR);
                 return false;
             }
@@ -382,7 +402,13 @@ class mysqli_db_connect implements DatabaseConnect {
             }
             
             //Bind WHERE clause
-            $sql .= 'WHERE '.$whereclause;
+            $sql .= 'WHERE '.$whereclause[0];
+            
+            $swhere = str_repeat("s", sizeof($whereclause[1]));
+            
+            foreach ($whereclause[1] as $key=>$val) {
+                $param[] = &$whereclause[1][$key];
+            }
         }
         
         if($sort) { //sort by
@@ -399,20 +425,35 @@ class mysqli_db_connect implements DatabaseConnect {
             $sql .= " LIMIT $limitcount";
         }
         
-        $returnresult = array();
-        $result = $this->connection->query($sql);
-        if ($result->num_rows == 0) {
-            return false;
-        } else {
-            while ($row = $result->fetch_assoc()) {
-                $resultrow = new stdClass();
-                foreach ($row as $key=>$val) {
-                    $resultrow->$key = $val;
-                }
-                $returnresult[] = $resultrow;
-            }
+        $this->statement = $this->connection->stmt_init();
+        $this->statement->prepare($sql);
+        if($swhere != null) {
+            call_user_func_array(array($this->statement, 'bind_param'), array_merge(array($swhere),$param));
         }
-        return $returnresult;
+        if($this->statement->execute()) {
+            $result = $this->statement->get_result();
+        
+            if ($result->num_rows == 0) {
+                return false;
+            } else {
+                $returnresult = array();
+                while ($row = $result->fetch_assoc()) {
+                    $resultrow = new stdClass();
+                    foreach ($row as $key=>$val) {
+                        $resultrow->$key = $val;
+                    }
+                    $returnresult[] = $resultrow;
+                }
+            }
+            $this->statement->close();
+            $this->statement = null;
+            return $returnresult;
+        } else {
+            $this->statement->close();
+            $this->statement = null;
+            return false;
+        }
+        
     }
 
     public function get_record ($tablename, $columnname = '*', $where = null, $sort = null, $sortorder='ASC', $limitcount=null, $limitoffset=null) {
@@ -431,18 +472,8 @@ class mysqli_db_connect implements DatabaseConnect {
     
     public function get_records_sql($sql, $where=null, $sort=null, $sortorder='ASC', $limitcount=null, $limitoffset=null) {
         
-        if($where) { //$where clause found
-            if(!(gettype($where) == 'object' || gettype($where) == 'array')) {
-                trigger_error("Unsupported datatype for where clause, object or array expected ".gettype($where)." passed", E_USER_ERROR);
-                return false;
-            }
-            
-            if(!$whereclause = $this->clause_builder($where, 'AND', false)) {
-                return false;
-            }
-            
-            $sql .= " $whereclause ";
-        }
+        $swhere = null;
+        $param = array();
         
         if($sort) { //sort by
             if(!gettype($sort) == 'string') {
@@ -458,20 +489,52 @@ class mysqli_db_connect implements DatabaseConnect {
             $sql .= " LIMIT $limitcount";
         }
         
-        $returnresult = array();
-        $result = $this->connection->query($sql);
-        if ($result->num_rows == 0) {
-            return false;
-        } else {
-            while ($row = $result->fetch_assoc()) {
-                $resultrow = new stdClass();
-                foreach ($row as $key=>$val) {
-                    $resultrow->$key = $val;
-                }
-                $returnresult[] = $resultrow;
+        if($where) { //$where clause found
+            if(!(gettype($where) == 'object' || gettype($where) == 'array')) {
+                trigger_error("Unsupported datatype for where clause, object or array expected ".gettype($where)." passed", E_USER_ERROR);
+                return false;
+            }
+            
+            if(!$whereclause = $this->clause_builder($where, 'AND', false)) {
+                return false;
+            }
+            
+            $swhere = str_repeat("s", sizeof($whereclause[1]));
+            
+            foreach ($whereclause[1] as $key=>$val) {
+                $param[] = &$whereclause[1][$key];
             }
         }
-        return $returnresult;
+        
+        $this->statement = $this->connection->stmt_init();
+        $this->statement->prepare($sql);
+        
+        if($swhere != null) {
+            call_user_func_array(array($this->statement, 'bind_param'), array_merge(array($swhere),$param));
+        }
+        if($this->statement->execute()) {
+            $result = $this->statement->get_result();
+        
+            if ($result->num_rows == 0) {
+                return false;
+            } else {
+                $returnresult = array();
+                while ($row = $result->fetch_assoc()) {
+                    $resultrow = new stdClass();
+                    foreach ($row as $key=>$val) {
+                        $resultrow->$key = $val;
+                    }
+                    $returnresult[] = $resultrow;
+                }
+            }
+            $this->statement->close();
+            $this->statement = null;
+            return $returnresult;
+        } else {
+            $this->statement->close();
+            $this->statement = null;
+            return false;
+        }
     }
 
     public function insert_record($tablename, $data) {
@@ -486,10 +549,24 @@ class mysqli_db_connect implements DatabaseConnect {
         
         $sql .= $insertclause[0]." VALUES ".$insertclause[1];
         
-        if($this->connection->query($sql) === false) {
-            error_reporting($this->connection->error, E_ERROR);
-            return false;
-        } else {
+        $s = str_repeat("s", sizeof($insertclause[2]));
+        
+        $param = array();
+        foreach ($insertclause[2] as $key=>$val) {
+            $param[] = &$insertclause[2][$key];
+        }
+        
+        $this->statement = $this->connection->stmt_init();
+        $this->statement->prepare($sql);
+        
+        call_user_func_array(array($this->statement, 'bind_param'), array_merge(array($s),$param));
+        
+        $r = $this->statement->execute();
+        
+        $this->statement->close();
+        $this->statement = null;
+        
+        if ($r) {
             $r = $this->connection->insert_id;
             if ($r > 0) {
                 return $r;
@@ -521,21 +598,29 @@ class mysqli_db_connect implements DatabaseConnect {
         foreach ($datas as $data) {
             $cols = $this->insert_clause_builder($data);
             $vals[] = $cols[1];
+            foreach ($cols[2] as $val) {
+                $param[] = $val;
+            }
+        }
+        
+        $params = array();
+        foreach ($param as $key=>$val) {
+            $params[] = &$param[$key];
         }
         
         $sql .= implode(',', $vals);
+        $s = str_repeat("s", sizeof($param));
         
-        if($this->connection->query($sql) === false) {
-            error_reporting($this->connection->error, E_ERROR);
-            return false;
-        } else {
-            $r = $this->connection->insert_id;
-            if ($r > 0) {
-                return $r;
-            }
-            return true;
-        }
-        return false;
+        $this->statement = $this->connection->stmt_init();
+        $this->statement->prepare($sql);
+        
+        call_user_func_array(array($this->statement, 'bind_param'), array_merge(array($s),$params));
+        
+        $r = $this->statement->execute();
+        $this->statement->close();
+        $this->statement = null;
+        
+        return $r;
     }
 
     public function update_records($tablename, $data = null, $where = null) {
@@ -569,31 +654,56 @@ class mysqli_db_connect implements DatabaseConnect {
             return false;
         }
         
-        if ($this->connection->query("UPDATE $tablename SET ".$setdata." WHERE ".$whereclause) === false) {
-            error_reporting($this->connection->error, E_ERROR);
-            return false;
+        $this->statement = $this->connection->stmt_init();
+        $this->statement->prepare("UPDATE $tablename SET ".$setdata[0]." WHERE ".$whereclause[0]);
+        
+        $s = str_repeat("s", sizeof($setdata[1])).str_repeat("s", sizeof($whereclause[1]));
+        
+        $param = array();
+        foreach ($setdata[1] as $key=>$val) {
+            $param[] = &$setdata[1][$key];
+        }
+        foreach ($whereclause[1] as $key=>$val) {
+            $param[] = &$whereclause[1][$key];
         }
         
-        return true;
+        call_user_func_array(array($this->statement, 'bind_param'), array_merge(array($s),$param));
+        
+        $r = $this->statement->execute();
+        
+        $this->statement->close();
+        $this->statement = null;
+        
+        return $r;
     }
     
     public function raw_execute_sql ($sql, $param = false) {
         
-        $paramArr = array();
-        foreach($params as $para) {
-            $paramArr[] = "'$para'";
-        }
-        
         if($param) {
-            $sql = str_replace('?',$params,$sql);
+            if(!$clause = $this->clause_builder($param, 'AND', false)) {
+                return false;
+            }
+        }
+        //Initiate Prepared Statement
+        $this->statement = $this->connection->stmt_init();
+        
+        $this->statement->prepare($sql);
+        
+        $s = str_repeat("s", sizeof($clause[1]));
+        
+        $param = array();
+        foreach ($clause[1] as $key=>$val) {
+            $param[] = &$clause[1][$key];
         }
         
-        if ($this->connection->query($sql) === false) {
-            error_reporting($this->connection->error, E_ERROR);
-            return false;
-        }
+        call_user_func_array(array($this->statement, 'bind_param'), array_merge(array($s),$param));
         
-        return true;
+        $r = $this->statement->execute();
+        
+        $this->statement->close();
+        $this->statement = null;
+        
+        return $r;
     }
 
     public function begin_transaction() {
@@ -615,78 +725,6 @@ class mysqli_db_connect implements DatabaseConnect {
         $this->connection->autocommit(TRUE);
     }
 
-    public function xml_install(SimpleXMLElement $xmlObj) {
-        $root = strtolower($xmlObj->getName());
-        $tables = array();
-        //check if root node is database
-        if($root != 'database') {
-            trigger_error("XML Error. XML File must have root named as 'database'", E_USER_ERROR);
-            return false;
-        }
-        
-        //For each child of Root node
-        foreach($xmlObj->children() as $table) {
-            $tablenode = strtolower($table->getName());
-            //Check if the child node is table
-            if($tablenode != 'table') {
-                trigger_error("XML Error. XML File must contain table as only child of 'database'", E_USER_ERROR);
-                return false;
-            }
-            
-            //Build attributes
-            $tableattr = array();
-            foreach ($table->attributes() as $attr=>$val) {
-                $attr = strtolower($attr);
-                $tableattr[$attr] = $val;
-            }
-            
-            if(!array_key_exists('name',$tableattr)) {
-                trigger_error("name of table not mentioned in the xml provided",E_USER_ERROR);
-                return false;
-            }
-            
-            $tablename = $table['name'];
-            
-            $columnArray = array();
-            $flagsArray = array();
-            
-            //Prepare flags value.
-            $flags = array('temp','ifnot','temporary','engine','collation');
-            foreach($flags as $flag) {
-                if(isset($table[$flag])) {
-                    if(strtolower($table[$flag]) == "false") {
-                        $flagsArray[$flag] = false;
-                    } else if (strtolower($table[$flag]) == "true") {
-                        $flagsArray[$flag] = true;
-                    } else {
-                        $flagsArray[$flag] = $table[$flag];
-                    }
-                }
-            }
-            
-            //Prepare Columns
-            foreach($table->children() as $column) {
-                $columnFlags = array('name','datatype','length','notnull','default','autoincrement','unique','primary');
-                $col = new stdClass();
-                foreach($columnFlags as $columnFlag) {    
-                    if(isset($column->$columnFlag)) {
-                        if($column->$columnFlag == "false") {
-                            $col->$columnFlag = false;
-                        } else if ($column->$columnFlag == "true") {
-                            $col->$columnFlag = true;
-                        } else {
-                            $col->$columnFlag = $column->$columnFlag."";
-                        }
-                    }       
-                }
-                $columnArray[] = $col;
-            }
-            $this->create_table($tablename,$columnArray,$flagsArray);
-            $tables[] = $tablename;
-        }
-        return $tables;
-    }
-    
     /**
      * Complete Database details, like DBNAME, Connection, port, socket, password
      */

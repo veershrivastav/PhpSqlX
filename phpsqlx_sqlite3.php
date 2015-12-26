@@ -1,11 +1,20 @@
 <?php
+/**
+ * PhpSqlX by www.veershrivastav.com
+ * 
+ * File: phpsqlx_sqlite3
+ * 
+ * Author: Aayush Sahay
+ * Date: June 5, 2015, 01:18:34 PM
+ *
+ */
 
-require_once('DatabaseConnect.php');
+require_once('PhpSqlX.php');
 
 define("DATABASE_MAIN", "sqlite_master");
 define("DATABASE_TEMP", "sqlite_temp_master");
 
-class sqlite3_db_connect implements DatabaseConnect {
+class phpsqlx_sqlite3 implements PhpSqlX {
 
     private $dbname = 'dbconnect';
     private $path = '/';
@@ -724,81 +733,7 @@ class sqlite3_db_connect implements DatabaseConnect {
         $this->connection->exec("COMMIT;");
         $this->transaction = false;
     }
-
-    /*     * * XML INSTALL ** */
-    public function xml_install(SimpleXMLElement $xmlObj) {
-        $root = strtolower($xmlObj->getName());
-        $tables = array();
-        //check if root node is database
-        if ($root != 'database') {
-            trigger_error("XML Error. XML File must have root named as 'database'", E_USER_ERROR);
-            return false;
-        }
-
-        //For each child of Root node
-        foreach ($xmlObj->children() as $table) {
-            $tablenode = strtolower($table->getName());
-            //Check if the child node is table
-            if ($tablenode != 'table') {
-                trigger_error("XML Error. XML File must contain table as only child of 'database'", E_USER_ERROR);
-                return false;
-            }
-
-            //Build attributes
-            $tableattr = array();
-            foreach ($table->attributes() as $attr => $val) {
-                $attr = strtolower($attr);
-                $tableattr[$attr] = $val;
-            }
-
-            if (!array_key_exists('name', $tableattr)) {
-                trigger_error("name of table not mentioned in the xml provided", E_USER_ERROR);
-                return false;
-            }
-
-            $tablename = (string) $table['name'];
-
-            $columnArray = array();
-            $flagsArray = array();
-
-            //Prepare flags value.
-            $flags = array('temp', 'ifnot', 'temporary');
-            foreach ($flags as $flag) {
-                if (isset($table[$flag])) {
-                    if (strtolower($table[$flag]) == "false") {
-                        $flagsArray[$flag] = false;
-                    } elseif (strtolower($table[$flag]) == "true") {
-                        $flagsArray[$flag] = true;
-                    }
-                }
-            }
-
-            //Prepare Columns
-            foreach ($table->children() as $column) {
-                $columnFlags = array('name', 'datatype', 'length', 'notnull', 'default', 'autoincrement', 'unique', 'primary');
-                $col = new stdClass();
-                foreach ($columnFlags as $columnFlag) {
-                    if (isset($column->$columnFlag)) {
-                        if ($column->$columnFlag == "false") {
-                            $col->$columnFlag = false;
-                        } elseif ($column->$columnFlag == "true") {
-                            $col->$columnFlag = true;
-                        } else {
-                            $col->$columnFlag = $column->$columnFlag . "";
-                        }
-                    }
-                }
-
-                $columnArray[] = $col;
-            }
-
-            $this->create_table($tablename, $columnArray, $flagsArray);
-            $tables[] = $tablename;
-        }
-
-        return $tables;
-    }
-
+    
     /*     * * GETINSTANCE ** */
     public static function getInstance($params) {
         $path = NULL;
