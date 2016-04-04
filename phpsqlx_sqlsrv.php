@@ -761,7 +761,7 @@ class phpsqlx_sqlsrv implements PhpSqlX {
         }
 
         if(!isset(self::$instance)) {
-            self::$instance = new sqlsrv_db_connect($hostname, $username, $password, $dbname);
+            self::$instance = new phpsqlx_sqlsrv($hostname, $username, $password, $dbname);
             if (self::$error) {
                 self::$instance = false;
             }

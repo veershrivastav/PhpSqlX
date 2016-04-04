@@ -263,7 +263,7 @@ class phpsqlx_mysqlnd implements PhpSqlX {
         }
         
         if(!isset(self::$instance)) {
-            self::$instance = new mysqlnd_db_connect($hostname, $username, $password, $dbname, $port, $socket);
+            self::$instance = new phpsqlx_mysqlnd($hostname, $username, $password, $dbname, $port, $socket);
             if (self::$error) {
                 self::$instance = false;
             }

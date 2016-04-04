@@ -763,7 +763,7 @@ class phpsqlx_sqlite3 implements PhpSqlX {
         }
 
         if (!isset(self::$instance)) {
-            self::$instance = new sqlite3_db_connect($dbname, $path);
+            self::$instance = new phpsqlx_mysqlnd($dbname, $path);
         }
         return self::$instance;
     }

@@ -256,7 +256,7 @@ class phpsqlx_mysqli implements PhpSqlX {
         }
         
         if(!isset(self::$instance)) {
-            self::$instance = new mysqli_db_connect($hostname, $username, $password, $dbname, $port, $socket);
+            self::$instance = new phpsqlx_mysqli($hostname, $username, $password, $dbname, $port, $socket);
             if (self::$error) {
                 self::$instance = false;
             }
