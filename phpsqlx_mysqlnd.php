@@ -703,15 +703,18 @@ class phpsqlx_mysqlnd implements PhpSqlX {
         
         $this->statement->prepare($sql);
         
-        $s = str_repeat("s", sizeof($clause[1]));
-        
-        $param = array();
-        foreach ($clause[1] as $key=>$val) {
-            $param[] = &$clause[1][$key];
-        }
-        
-        call_user_func_array(array($this->statement, 'bind_param'), array_merge(array($s),$param));
-        
+		//check for size of clause before adding binding it.
+		if (sizeof($clause) > 0) {
+			$s = str_repeat("s", sizeof($clause[1]));
+			
+			$param = array();
+			foreach ($clause[1] as $key=>$val) {
+				$param[] = &$clause[1][$key];
+			}
+			
+			call_user_func_array(array($this->statement, 'bind_param'), array_merge(array($s),$param));
+		}
+		
         $r = $this->statement->execute();
         
         $this->statement->close();
