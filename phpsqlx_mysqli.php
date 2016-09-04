@@ -593,13 +593,8 @@ class phpsqlx_mysqli implements PhpSqlX {
     
     public function raw_execute_sql ($sql, $param = false) {
         
-        $paramArr = array();
-        foreach($params as $para) {
-            $paramArr[] = "'$para'";
-        }
-        
         if($param) {
-            $sql = str_replace('?',$params,$sql);
+            $sql = str_replace('?',$param,$sql);
         }
         
         if ($this->connection->query($sql) === false) {
