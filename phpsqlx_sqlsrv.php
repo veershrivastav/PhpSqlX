@@ -745,7 +745,7 @@ class phpsqlx_sqlsrv implements PhpSqlX {
     }
 
     /*     * * GETINSTANCE ** */
-    public static function getInstance($params) {
+    final public static function getInstance($params) {
         $hostname = null;
         $username=null;
         $password=null;

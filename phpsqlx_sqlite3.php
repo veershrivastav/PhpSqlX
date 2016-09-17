@@ -749,7 +749,7 @@ class phpsqlx_sqlite3 implements PhpSqlX {
     }
     
     /*     * * GETINSTANCE ** */
-    public static function getInstance($params) {
+    final public static function getInstance($params) {
         $path = NULL;
         $dbname = '';
 
