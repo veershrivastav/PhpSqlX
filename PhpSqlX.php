@@ -42,7 +42,7 @@ interface PhpSqlX {
     
     public function insert_records ($tablname, $datas);
     
-    public function raw_execute_sql ($sql);
+    public function raw_execute_sql ($sql, $param);
     
     public function begin_transaction();
     
