@@ -245,7 +245,7 @@ class phpsqlx_mysqlnd implements PhpSqlX {
         return implode(",", $columnsqlarr);
     }
     
-    final public static function getInstance($params) {
+    public static function getInstance($params) {
         $hostname = null;
         $username=null;
         $password=null;
